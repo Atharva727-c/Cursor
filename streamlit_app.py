@@ -1,5 +1,5 @@
 import streamlit as st
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 import sys
 import os
 from dotenv import load_dotenv
@@ -34,8 +34,10 @@ else:
 # Add the current directory to the path to import local modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from rag_query import retrieve_context, build_prompt
 from snowflake_connect import connect_snowflake
+from orchestrator import create_orchestrator
+from cortex_analyst_wrapper import query_cortex_analyst_wrapper
+from rag_wrapper import query_rag_wrapper
 
 # Page configuration
 st.set_page_config(
@@ -92,46 +94,41 @@ if "messages" not in st.session_state:
 if "sources" not in st.session_state:
     st.session_state.sources = []
 
+if "orchestrator" not in st.session_state:
+    st.session_state.orchestrator = create_orchestrator()
 
-def get_llm_response(question: str, k: int = 5) -> Tuple[str, List[Tuple[str, str, int, float]]]:
+
+def get_orchestrated_response(question: str, k: int = 5) -> Dict[str, Any]:
     """
-    Get LLM response using Snowflake Cortex.
-    Returns the answer and source contexts.
+    Get response using the orchestrator to route to appropriate system(s).
+    
+    Returns:
+        Dictionary with routing info, results, and combined response
     """
     try:
-        # Retrieve relevant contexts
-        contexts = retrieve_context(question, k=k)
-        if not contexts:
-            return "I couldn't find any relevant information in the documents. Please try rephrasing your question.", []
+        orchestrator = st.session_state.orchestrator
         
-        # Build prompt
-        prompt = build_prompt(question, contexts)
+        # Execute the query through orchestrator
+        result = orchestrator.execute_query(
+            question=question,
+            cortex_analyst_func=query_cortex_analyst_wrapper,
+            rag_query_func=lambda q: query_rag_wrapper(q, k=k),
+            k=k
+        )
         
-        # Get LLM response
-        with connect_snowflake() as conn, conn.cursor() as cur:
-            # Try multiple models in order of preference
-            models = ['llama3-8b', 'mistral-7b', 'mixtral-8x7b', 'snowflake-arctic']
-            answer = None
-            last_error = None
-            for model in models:
-                try:
-                    cur.execute(
-                        f"SELECT SNOWFLAKE.CORTEX.COMPLETE('{model}', %s)",
-                        (prompt,),
-                    )
-                    (answer,) = cur.fetchone()
-                    break
-                except Exception as e:
-                    last_error = str(e)
-                    continue
-            
-            if answer is None:
-                raise Exception(f"All models failed. Last error: {last_error}")
-        
-        return answer, contexts
+        return result
     
     except Exception as e:
-        return f"Error: {str(e)}", []
+        return {
+            "query": question,
+            "classification": {
+                "query_type": "error",
+                "reasoning": f"Error in orchestration: {str(e)}",
+                "confidence": 0.0
+            },
+            "results": {},
+            "combined_response": f"Error: {str(e)}"
+        }
 
 
 # Sidebar
@@ -167,10 +164,11 @@ with st.sidebar:
     # Instructions
     st.subheader("📖 How to use")
     st.markdown("""
-    1. Type your question in the chat input
-    2. Press Enter or click Send
-    3. View the AI response and sources
-    4. Sources show which PDF chunks were used
+    **Ask questions about:**
+    - 📊 **Analytics**: Orders, customers, products, sales data
+    - 📄 **Documents**: PDF content and information
+    - 🔀 **Both**: Combined insights
+    
     """)
     
     # Clear chat button
@@ -181,55 +179,99 @@ with st.sidebar:
 
 
 # Main header
-st.markdown('<div class="main-header">🤖 CRH POC - RAG Chat Interface</div>', unsafe_allow_html=True)
-st.markdown("### Ask questions about your PDF documents")
+st.markdown('<div class="main-header">🤖 CRH EKO-AI 2 - Unified Query Interface</div>', unsafe_allow_html=True)
+st.markdown("### Ask questions about your data (Analytics, Documents,Etc)")
 
 # Display chat messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         
-        # Display sources for assistant messages
+        # Display routing information
+        if message["role"] == "assistant" and message.get("routing_info"):
+            routing = message["routing_info"]
+            query_type = routing.get("query_type", "unknown")
+            route = routing.get("route", "")
+            
+            # Show routing badge
+            if query_type == "analytics" or route == "CORTEX_ANALYST":
+                st.info(f"🔍 Routed to: **Cortex Analyst** (Confidence: {routing.get('confidence', 0):.2f})")
+            elif query_type == "document" or route == "RAG":
+                st.info(f"📄 Routed to: **RAG/Documents** (Confidence: {routing.get('confidence', 0):.2f})")
+            elif query_type == "hybrid" or route == "BOTH":
+                st.info(f"🔀 Routed to: **Both Systems** (Confidence: {routing.get('confidence', 0):.2f})")
+            
+            if routing.get("reasoning"):
+                with st.expander("ℹ️ Routing Reasoning"):
+                    st.markdown(routing["reasoning"])
+        
+        # Display sources for RAG responses
         if message["role"] == "assistant" and message.get("sources"):
-            with st.expander("📚 View Sources"):
-                for i, (ctx, fn, ci, sim) in enumerate(message["sources"], 1):
-                    st.markdown(f"**Source {i}:** `{fn}` (Chunk {ci}, Similarity: {sim:.4f})")
-                    st.markdown(f"*{ctx[:200]}...*" if len(ctx) > 200 else f"*{ctx}*")
+            with st.expander("📚 View Document Sources"):
+                for i, source in enumerate(message["sources"], 1):
+                    if isinstance(source, dict):
+                        st.markdown(f"**Source {i}:** `{source.get('filename', 'Unknown')}` (Chunk {source.get('chunk_index', 'N/A')}, Similarity: {source.get('similarity', 0):.4f})")
+                        st.markdown(f"*{source.get('content_preview', '')}*")
+                    else:
+                        # Legacy format
+                        ctx, fn, ci, sim = source
+                        st.markdown(f"**Source {i}:** `{fn}` (Chunk {ci}, Similarity: {sim:.4f})")
+                        st.markdown(f"*{ctx[:200]}...*" if len(ctx) > 200 else f"*{ctx}*")
                     st.divider()
+        
+        # Display analytics results
+        if message["role"] == "assistant" and message.get("analytics_results"):
+            with st.expander("📊 View Analytics Results"):
+                analytics = message["analytics_results"]
+                if "sql_query" in analytics:
+                    st.markdown("**Generated SQL:**")
+                    st.code(analytics["sql_query"], language="sql")
+                if "results" in analytics and analytics["results"]:
+                    st.markdown(f"**Results ({analytics.get('row_count', 0)} rows):**")
+                    import pandas as pd
+                    df = pd.DataFrame(analytics["results"])
+                    st.dataframe(df, use_container_width=True)
 
 # Chat input
-if prompt := st.chat_input("Ask a question about your documents..."):
+if prompt := st.chat_input("Ask a question (analytics, documents, or both)..."):
     # Add user message to chat
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
     
-    # Get assistant response
+    # Get orchestrated response
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            answer, sources = get_llm_response(prompt, k=k_chunks)
-            st.markdown(answer)
+        with st.spinner("Routing query and processing..."):
+            result = get_orchestrated_response(prompt, k=k_chunks)
             
-            # Display sources
-            if sources:
-                with st.expander("📚 View Sources"):
-                    for i, (ctx, fn, ci, sim) in enumerate(sources, 1):
-                        st.markdown(f"**Source {i}:** `{fn}` (Chunk {ci}, Similarity: {sim:.4f})")
-                        st.markdown(f"*{ctx[:200]}...*" if len(ctx) > 200 else f"*{ctx}*")
-                        st.divider()
+            # Display the combined response
+            st.markdown(result.get("combined_response", "No response generated"))
+            
+            # Store routing info and results for display
+            routing_info = result.get("classification", {})
+            rag_results = result.get("results", {}).get("rag", {})
+            cortex_results = result.get("results", {}).get("cortex_analyst", {})
+            
+            # Display sources if RAG was used
+            sources = rag_results.get("sources", []) if rag_results else []
+            
+            # Display analytics results if Cortex Analyst was used
+            analytics_results = cortex_results if cortex_results and "error" not in cortex_results else None
     
     # Add assistant message to chat history
     st.session_state.messages.append({
         "role": "assistant", 
-        "content": answer,
-        "sources": sources
+        "content": result.get("combined_response", "No response"),
+        "routing_info": routing_info,
+        "sources": sources,
+        "analytics_results": analytics_results
     })
 
 # Footer
 st.divider()
 st.markdown(
     "<div style='text-align: center; color: #666; padding: 1rem;'>"
-    "Powered by Snowflake Cortex & Streamlit | RAG over PDF Documents"
+    "Powered by EPAM DIAL Orchestrator | Snowflake Cortex Analyst | RAG over PDF Documents"
     "</div>",
     unsafe_allow_html=True
 )

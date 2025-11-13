@@ -25,16 +25,24 @@ def retrieve_context(question: str, k: int = 5) -> List[Tuple[str, str, int, flo
 
 
 def build_prompt(question: str, contexts: List[Tuple[str, str, int, float]]) -> str:
+	# Build context block without chunk references - just the content
 	context_block = "\n\n".join(
-		f"[{i+1}] (file: {fn}, chunk: {ci}, score: {sim:.4f})\n{ctx}"
-		for i, (ctx, fn, ci, sim) in enumerate(contexts)
+		ctx for ctx, _, _, _ in contexts
 	)
 	return (
-		"Use the context chunks below to answer the question. "
-		"If the answer is not in the context, say you don't know.\n\n"
-		f"Context:\n{context_block}\n\n"
+		"You are a helpful assistant that answers questions based on the provided document context. "
+		"Provide a clear, detailed, and comprehensive answer to the user's question. "
+		"Use only the information from the context below. "
+		"If the answer is not in the context, politely say you don't have that information.\n\n"
+		"IMPORTANT INSTRUCTIONS:\n"
+		"- Do NOT mention chunks, chunk numbers, files, or any technical details in your answer\n"
+		"- Do NOT reference the context structure (e.g., 'in chunk [1]', 'according to file X')\n"
+		"- Provide a natural, flowing answer as if you're an expert on the topic\n"
+		"- Synthesize information from all relevant parts of the context\n"
+		"- Write in a clear, professional manner\n\n"
+		f"Context from documents:\n{context_block}\n\n"
 		f"Question: {question}\n\n"
-		"Answer:"
+		"Answer (provide a clear, detailed response without mentioning chunks or files):"
 	)
 
 

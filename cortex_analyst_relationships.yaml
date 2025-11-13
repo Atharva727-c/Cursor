@@ -1,0 +1,37 @@
+relationships:
+  - name: ORDERS_TO_CUSTOMERS
+    leftTable: ORDERS
+    rightTable: CUSTOMERS
+    relationshipColumns:
+      - leftColumn: CUSTOMER_ID
+        rightColumn: CUSTOMER_ID
+    relationshipType: many_to_one
+    joinType: inner
+
+  - name: ORDER_ITEMS_TO_ORDERS
+    leftTable: ORDER_ITEMS
+    rightTable: ORDERS
+    relationshipColumns:
+      - leftColumn: ORDER_ID
+        rightColumn: ORDER_ID
+    relationshipType: many_to_one
+    joinType: inner
+
+  - name: ORDER_ITEMS_TO_PRODUCTS
+    leftTable: ORDER_ITEMS
+    rightTable: PRODUCTS
+    relationshipColumns:
+      - leftColumn: PRODUCT_ID
+        rightColumn: PRODUCT_ID
+    relationshipType: many_to_one
+    joinType: inner
+
+  - name: PAYMENTS_TO_ORDERS
+    leftTable: PAYMENTS
+    rightTable: ORDERS
+    relationshipColumns:
+      - leftColumn: ORDER_ID
+        rightColumn: ORDER_ID
+    relationshipType: many_to_one
+    joinType: inner
+

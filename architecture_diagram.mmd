@@ -1,0 +1,43 @@
+graph LR
+    A[User Query] --> B[Streamlit Chat Interface]
+    B --> C[EPAM DIAL Orchestrator<br/>GPT-4 Router]
+    
+    C --> D{Query Classification}
+    
+    D -->|Analytics Query| E[Cortex Analyst Wrapper]
+    D -->|Document Query| F[RAG Wrapper]
+    D -->|Hybrid Query| E
+    D -->|Hybrid Query| F
+    
+    E --> G[Snowflake Cortex<br/>SQL Generation]
+    G --> H[Table Schema Discovery]
+    H --> I[SQL Query Execution]
+    I --> J[(Structured Tables<br/>ORDERS, CUSTOMERS<br/>PRODUCTS, PAYMENTS<br/>ORDER_ITEMS)]
+    
+    F --> K[Vector Similarity Search]
+    K --> L[PDF Document Chunks<br/>Embeddings]
+    L --> M[Snowflake Cortex<br/>COMPLETE LLM]
+    
+    J --> N[Analytics Results]
+    M --> O[Document Answer]
+    
+    N --> P[Response Combiner]
+    O --> P
+    
+    P --> Q[Formatted Response]
+    Q --> B
+    B --> R[User Interface<br/>with Sources & SQL]
+    
+    style A fill:#e1f5ff
+    style B fill:#c8e6c9
+    style C fill:#fff9c4
+    style E fill:#ffccbc
+    style F fill:#ffccbc
+    style G fill:#b3e5fc
+    style M fill:#b3e5fc
+    style J fill:#f8bbd0
+    style L fill:#f8bbd0
+    style P fill:#d1c4e9
+    style Q fill:#d1c4e9
+    style R fill:#c8e6c9
+
