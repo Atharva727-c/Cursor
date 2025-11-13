@@ -90,3 +90,47 @@ Notes:
 - Embedding model used: `e5-base-v2` via `SNOWFLAKE.CORTEX.EMBED_TEXT_768`.
 - Generation model used: `snowflake-arctic` via `SNOWFLAKE.CORTEX.COMPLETE`.
 - Adjust K, chunk size, models as needed in `ingest_pdfs.py` and `rag_query.py`.
+
+## Streamlit Chat Interface
+
+A modern web-based chat interface for interacting with your RAG system.
+
+### 1) Start the Streamlit App
+
+**Option A: Using the batch file (Windows)**
+```powershell
+.\run_streamlit.bat
+```
+
+**Option B: Using Python directly**
+```powershell
+python -m streamlit run streamlit_app.py
+```
+
+### 2) Access the Interface
+
+The app will automatically open in your default browser, or you can manually navigate to:
+- **Local URL:** http://localhost:8501
+- **Network URL:** (shown in terminal output)
+
+### 3) Features
+
+- 💬 Interactive chat interface
+- 🔍 Real-time RAG query processing
+- 📚 Source document references
+- ⚙️ Configurable K (number of context chunks)
+- 🎨 Modern, user-friendly UI
+- ✅ Connection status indicator
+
+### 4) Usage
+
+1. Type your question in the chat input at the bottom
+2. Press Enter or click Send
+3. View the AI-generated response
+4. Expand "View Sources" to see which PDF chunks were used
+5. Adjust K value in the sidebar to control context retrieval
+6. Use "Clear Chat" button to reset conversation history
+
+### 5) Stop the Server
+
+Press `Ctrl+C` in the terminal where Streamlit is running.
